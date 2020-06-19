@@ -11,7 +11,7 @@ sensor_type = {'HW-666':  ['voltage'],
                'TSL2561': ['light']}
 
 
-def init_connect(username='guest', password='guest',  host='rabbitmq', port=5672, virtual_host='/'):
+def init_connect(username='guest', password='guest',  host='rabbitmq-mqtt', port=5672, virtual_host='/'):
     credentials = pika.PlainCredentials(username, password)
     connection = pika.BlockingConnection(pika.ConnectionParameters(host, port, virtual_host, credentials))
     return connection
@@ -21,25 +21,37 @@ def exit_connect(connection):
     connection.close()
 
 
-def data_handler(packet, data, connection=None, print_data=False):
+def data_handler(packet, data, connection=None, print_data=False, file_name=None):
     if 'MACaddr' in packet and 'num' in packet:
         server_packet = {'MACaddr': str(packet['MACaddr'])}
-        if str(packet['MACaddr']) in data['address']:
-            num_address = data['address'].index(str(packet['MACaddr']))
-            # Проверка повтора пакетов
-            if packet['num'] <= data['number'][num_address]:
-                # При переполнении int16 (max ~= 65тыс) счётчик пакетов обнулится
-                if not ((packet['num'] < 15) and (65000 < data['number'][num_address])):
-                    return
-        else:
+        if not(str(packet['MACaddr']) in data['address']):
             data['address'].append(str(packet['MACaddr']))
             data['number'].append(-1)
+        # if str(packet['MACaddr']) in data['address']:
+        #     num_address = data['address'].index(str(packet['MACaddr']))
+        #     # Проверка повтора пакетов
+        #     if packet['num'] <= data['number'][num_address]:
+        #         # При переполнении int16 (max ~= 65тыс) счётчик пакетов обнулится
+        #         if not ((packet['num'] < 15) and (65000 < data['number'][num_address])):
+        #             return
+        # else:
+        #     data['address'].append(str(packet['MACaddr']))
+        #     data['number'].append(-1)
 
         num_address = data['address'].index(str(packet['MACaddr']))
         data['number'][num_address] = packet['num']
         if print_data:
             print('MAC-адресс ' + str(packet['MACaddr']))
             print('Номер пакета: ' + str(packet['num']))
+        if not(file_name is None):
+            prt_str = '            "' + str(packet['MACaddr']) + '": ' + str(packet['num']) + '\n'
+            file = open(file_name, 'a')
+            try:
+                file.write(prt_str)
+            except Exception as err:
+                print('Error: ' + str(err))
+            finally:
+                file.close()
 
         if 'sensor' in packet:
             for sensor in packet['sensor']:
@@ -81,3 +93,4 @@ def data_handler(packet, data, connection=None, print_data=False):
 
         if print_data:
             print('')
+

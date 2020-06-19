@@ -75,6 +75,8 @@ class LoRaClass:
             GPIO.setup(self._dio0, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
         if not(self._dio1 is None):
             GPIO.setup(self._dio1, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+        if not(self._dio3 is None):
+            GPIO.setup(self._dio3, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
         # запуск модуля
         GPIO.output(self._reset, GPIO.LOW)
         time.sleep(0.020)
@@ -268,7 +270,7 @@ class LoRaClass:
         return response
 
     # Приём пакета
-    def receiver_packet(self, count=1, wait=1000, rssi=False, snr=False):
+    def receiver_packet(self, count=1, wait=1000, rssi=False, snr=False, file_name=None):
         if (not isinstance(count, int)) or (count < 0):
             return True
         self.packet = []
@@ -279,29 +281,54 @@ class LoRaClass:
         for num in range(count):
             self.mode_RX_single()
             rx_done = 0
+            rx_timeout = 0
             crc_err = 0
+            start_time = time.time()
+            signal = False
             for cycle in range(wait):
                 time.sleep(0.01)
-                # if (self._dio0 is None) or (self._dio1 is None):
-                #     result = self.field_get([LoRa.RxTimeout, LoRa.RxDone], read=True)
-                #     rx_timeout = result[LoRa.RxTimeout]
-                #     rx_done = result[LoRa.RxDone]
-                # else:
-                #     rx_timeout = 0
-                #     # rx_done = digitalRead(_dio0);
-                result = self.field_get([LoRa.RxTimeout, LoRa.RxDone, LoRa.PayloadCrcError], read=True)
-                rx_timeout = result[LoRa.RxTimeout]
-                rx_done = result[LoRa.RxDone]
-                crc_err = result[LoRa.PayloadCrcError]
+                if not((self._dio0 is None) or (self._dio1 is None)):
+                    pin_done = GPIO.input(self._dio0)
+                    pin_timeout = GPIO.input(self._dio1)
+                    # if GPIO.input(self._dio0) == GPIO.LOW:
+                    #     rx_done = 0
+                    # if GPIO.input(self._dio1) == GPIO.LOW:
+                    #     rx_timeout = 0
+                    if not(self._dio3 is None):
+                        pin_crc_err = GPIO.input(self._dio3)
+                        # if GPIO.input(self._dio3) == GPIO.LOW:
+                        #     crc_err = 0
+                    else:
+                        pin_crc_err = 0
+                    if (pin_done > 0) or (pin_timeout > 0) or (pin_crc_err > 0):
+                        signal = True
+                if (self._dio0 is None) or (self._dio1 is None) or \
+                        (time.time() - start_time > 2) or signal:
+                    result = self.field_get([LoRa.RxTimeout, LoRa.RxDone, LoRa.PayloadCrcError], read=True)
+                    rx_timeout = result[LoRa.RxTimeout]
+                    rx_done = result[LoRa.RxDone]
+                    crc_err = result[LoRa.PayloadCrcError]
+
                 if rx_timeout > 0:
                     self.field.clear_flags(LoRa.RxTimeout)
                     self.mode_RX_single()
+                    rx_done = rx_timeout = crc_err = 0
+                    signal = False
+                    start_time = time.time()
                 if rx_done > 0:
                     break
             if (rx_done > 0) and (crc_err == 0):
                 self.field.clear_flags(LoRa.RxDone)
                 self.packet.append(self.read_packet_data(rssi=rssi, snr=snr))
             else:
+                if (crc_err != 0) and (not(file_name is None)):
+                    file = open(file_name, 'a')
+                    try:
+                        file.write('crc error\n')
+                    except Exception as err:
+                        print('Error: ' + str(err))
+                    finally:
+                        file.close()
                 self.field.clear_flags([LoRa.RxDone, LoRa.ValidHeader, LoRa.PayloadCrcError])
             self.mode_sleep()
         return self.packet
@@ -391,3 +418,4 @@ class LoRaClass:
             if sleep:
                 self.mode_sleep()
         return result
+

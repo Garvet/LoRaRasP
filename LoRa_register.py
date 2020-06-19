@@ -636,6 +636,8 @@ class LoRaRegister:
         for flag in flags:
             if not(flag in self.flags):
                 return True
+        if not(REG_IRQ_FLAGS in self._register):
+            return True
         register = self._register[REG_IRQ_FLAGS]
         self._register[REG_IRQ_FLAGS] = 0
         for flag in flags:

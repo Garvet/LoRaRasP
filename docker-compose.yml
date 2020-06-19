@@ -1,0 +1,15 @@
+version: "3.7"
+
+services:
+
+    lora_receiver:
+        build: lora_receiver/
+        command: python ./LoRa_receiver.py
+        hostname: localhost
+        restart: always
+        volumes:
+          - "/home/pi/GH/lora_receiver/text.txt:/home/pi/Documents/text.txt"
+        devices: 
+          - "/dev/mem:/dev/mem"
+          - "/dev/gpiomem:/dev/gpiomem"
+          - "/dev/spidev0.0:/dev/spidev0.0"
